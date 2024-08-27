@@ -15,6 +15,11 @@ mlflow = "^2.15.1"
 python-dotenv = "^1.0.1"
 pydantic = "^2.8.2"
 evidently = "^0.4.36"
+sqlalchemy = "^2.0.32"
+psycopg2 = "^2.9.9"
+feast = {extras = ["postgres"], version = "^0.40.1"}
+dbt-core = "^1.8.5"
+dbt-postgres = "^1.8.2"
 
 
 [tool.poetry.group.dev.dependencies]

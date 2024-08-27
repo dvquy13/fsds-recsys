@@ -1,0 +1,3 @@
+# Set up
+
+- Install Docker
