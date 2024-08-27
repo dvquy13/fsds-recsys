@@ -21,3 +21,4 @@ notebooks/*
 
 # DBT profiles
 **/profiles.yml
+**/.user.yml

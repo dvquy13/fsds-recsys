@@ -16,12 +16,12 @@ SELECT
         PARTITION BY user_id 
         ORDER BY timestamp 
         RANGE BETWEEN INTERVAL '90 days' PRECEDING AND '0 seconds' PRECEDING
-    ) AS user_asin_rating_cnt_90d,
+    ) AS user_rating_cnt_90d,
     avg(rating) OVER (
         PARTITION BY user_id 
         ORDER BY timestamp 
         RANGE BETWEEN INTERVAL '90 days' PRECEDING AND '1 seconds' PRECEDING
-    ) AS user_asin_rating_avg_prev_rating_90d,
+    ) AS user_rating_avg_prev_rating_90d,
 	array_to_string(
 		ARRAY_AGG(parent_asin) OVER (
 	        PARTITION BY user_id
@@ -29,6 +29,6 @@ SELECT
 	        ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING
 	    ), 
 	    ','
-    ) AS user_asin_rating_list_10_recent_asin
+    ) AS user_rating_list_10_recent_asin
 FROM
     raw
