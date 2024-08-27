@@ -5,6 +5,9 @@ import pandas as pd
 from feast import FeatureStore
 from feast.data_source import PushMode
 
+end_date_string = "2020-08-27"
+end_date_object = datetime.strptime(end_date_string, "%Y-%m-%d")
+
 
 def run_demo():
     store = FeatureStore(repo_path=".")
@@ -18,7 +21,9 @@ def run_demo():
     fetch_historical_features_entity_df(store, for_batch_scoring=True)
 
     print("\n--- Load features into online store ---")
-    store.materialize_incremental(end_date=datetime.now())
+    # Use the fix end date to simulate testing with historical data
+    # store.materialize_incremental(end_date=datetime.now())
+    store.materialize_incremental(end_date=end_date_object)
 
     # Reinitiate to fix error not recognizing feature service
     store = FeatureStore(repo_path=".")
@@ -55,10 +60,15 @@ def run_demo():
 def fetch_historical_features_entity_df(store: FeatureStore, for_batch_scoring: bool):
     entity_df = pd.DataFrame.from_dict(
         {
-            "user_id": ["AE254X5CLDBVBPAQKQ5YK2WXRX6A", "AE2DMKKQV7GGCYWZ7HTGMECN5UWQ"],
+            "user_id": [
+                "AE254X5CLDBVBPAQKQ5YK2WXRX6A",
+                "AE2DMKKQV7GGCYWZ7HTGMECN5UWQ",
+                "AEBORGHNCXOCGYEJ4WCULQCQWLAA",
+            ],
             "event_timestamp": [
                 datetime(2020, 8, 25, 20, 0, 0),
                 datetime(2020, 8, 25, 1, 7, 0),
+                datetime(2020, 8, 27, 9, 0, 0),
             ],
         }
     )
@@ -80,6 +90,7 @@ def fetch_online_features(store, source: str = ""):
     entity_rows = [
         {"user_id": "AE254X5CLDBVBPAQKQ5YK2WXRX6A"},
         {"user_id": "AE2DMKKQV7GGCYWZ7HTGMECN5UWQ"},
+        {"user_id": "AEBORGHNCXOCGYEJ4WCULQCQWLAA"},
     ]
     if source == "feature_service":
         features_to_fetch = store.get_feature_service("user_rating_v1")
