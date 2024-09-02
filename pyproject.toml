@@ -20,6 +20,7 @@ psycopg2 = "^2.9.9"
 feast = {extras = ["postgres"], version = "^0.40.1"}
 dbt-core = "^1.8.5"
 dbt-postgres = "^1.8.2"
+torch = "^2.4.0"
 
 
 [tool.poetry.group.dev.dependencies]
