@@ -5,6 +5,8 @@
 ## Prerequisite
 - Poetry 1.8.3
 - Miniconda or alternatives that can create new Python environment with a specified Python version
+- PostgreSQL (optionall for Feast setup in Lesson 2 and to install the poetry deps)
+  - For Mac, run: `brew install postgresql`
 
 ## Set up
 - Create a new `.env` file based on `.env.example` and populate the variables there
