@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from loguru import logger
 from torch.utils.data import IterableDataset
@@ -34,6 +35,7 @@ class SkipGramDataset(IterableDataset):
 
         The reason that interacted_dict and item_freq can be passed into the initialization is that at val dataset creation we want to do negative sampling based on the data from the train set as well.
         """
+
         assert sequences_fp.endswith(".jsonl")
         self.sequences_fp = sequences_fp
         self.window_size = window_size
@@ -104,12 +106,12 @@ class SkipGramDataset(IterableDataset):
             for line in f:
                 seq = json.loads(line)
                 for i in range(len(seq)):
-                    yield self.__get_item(seq, i)
+                    yield self._get_item(seq, i)
 
     def __len__(self):
         return self.num_targets
 
-    def __get_item(self, sequence, i):
+    def _get_item(self, sequence, i):
         sequence = [self.id_to_idx[item] for item in sequence]
         target_item = sequence[i]
 
@@ -199,3 +201,40 @@ class SkipGramDataset(IterableDataset):
 
         loss = loss_fn(predictions, labels)
         return loss
+
+
+class SkipGramDistributedDataset(SkipGramDataset):
+    def __init__(
+        self,
+        sequences_fp: str,
+        interacted=defaultdict(set),
+        item_freq=defaultdict(int),
+        window_size=2,
+        negative_samples=5,
+        id_to_idx=None,
+    ):
+        super().__init__(
+            sequences_fp,
+            interacted=interacted,
+            item_freq=item_freq,
+            window_size=window_size,
+            negative_samples=negative_samples,
+            id_to_idx=id_to_idx,
+        )
+        self.rank = dist.get_rank()
+        self.world_size = dist.get_world_size()
+        logger.info(f"{self.rank=}")
+        logger.info(f"{self.world_size=}")
+
+    def __iter__(self):
+        i = 0
+        with open(self.sequences_fp, "r") as f:
+            for line in f:
+                if self.rank == (i % self.world_size):
+                    seq = json.loads(line)
+                    for i in range(len(seq)):
+                        yield self._get_item(seq, i)
+                i += 1
+
+    def __len__(self):
+        return self.num_targets // self.world_size

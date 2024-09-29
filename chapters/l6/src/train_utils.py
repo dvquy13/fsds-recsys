@@ -3,8 +3,10 @@ import time
 import mlflow
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.optim as optim
 from loguru import logger
+from torch.nn.parallel import DistributedDataParallel
 from tqdm.auto import tqdm
 
 from src.id_mapper import IDMapper
@@ -104,10 +106,11 @@ def train(
     callbacks=[],
     verbose=False,
 ):
-    if (dataset_type := model.get_expected_dataset_type()) != (
-        actual := type(dataloader.dataset)
-    ):
-        raise Exception(f"Expected dataset type {dataset_type} but got {actual}")
+    if isinstance(model, DistributedDataParallel):
+        module = model.module
+    else:
+        module = model
+
     device = torch.device(device)
     model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=l2_reg)
@@ -141,20 +144,23 @@ def train(
         model.train()
         total_loss = 0
         num_batches = len(dataloader)
-        batch_iterator = tqdm(
-            enumerate(dataloader),
-            desc=f"Training Epoch {epoch+1}",
-            position=1,
-            leave=None,
-            total=num_batches,
-        )
+        if dist.get_rank() == 0:
+            batch_iterator = tqdm(
+                enumerate(dataloader),
+                desc=f"Rank {dist.get_rank()} - Training Epoch {epoch+1}",
+                position=1,
+                leave=None,
+                total=num_batches,
+            )
+        else:
+            batch_iterator = enumerate(dataloader)
 
         for batch_idx, batch_input in batch_iterator:
             step += 1
 
             optimizer.zero_grad()
-            loss = dataset_type.forward(
-                model, batch_input, loss_fn=loss_fn, device=device
+            loss = dataloader.dataset.forward(
+                module, batch_input, loss_fn=loss_fn, device=device
             )
 
             loss.backward()
@@ -200,16 +206,30 @@ def train(
         if verbose:
             logger.info(f"Epoch {epoch + 1}, Loss: {avg_train_loss:.4f}")
 
+        # Synchronize all processes before validation
+        torch.distributed.barrier()
+
         if val_dataloader is not None:
             model.eval()
-            val_loss = 0
+            val_loss = 0.0
             with torch.no_grad():
                 for batch_input in val_dataloader:
-                    loss = dataset_type.forward(model, batch_input, device=device)
+                    loss = dataloader.dataset.forward(
+                        module, batch_input, device=device
+                    )
                     val_loss += loss.item()
 
             val_loss /= len(val_dataloader)
+
+            # Aggregate validation loss across processes
+            val_loss_tensor = torch.tensor([val_loss], device=device)
+            torch.distributed.all_reduce(
+                val_loss_tensor, op=torch.distributed.ReduceOp.SUM
+            )
+            val_loss = val_loss_tensor.item() / dist.get_world_size()
+
             epoch_metric_log_payload["val_loss"] = val_loss
+            # if dist.get_rank() == 0:
             epoch_iterator.set_postfix(Val_Loss=val_loss)
             if verbose:
                 logger.info(f"Epoch {epoch + 1}, Validation Loss: {val_loss:.4f}")
@@ -228,6 +248,9 @@ def train(
                     stop_training = True
         else:
             scheduler.step(avg_train_loss, epoch=epoch + 1)
+
+        # Synchronize after validation
+        torch.distributed.barrier()
 
         # Log the time taken for this epoch
         epoch_time = time.time() - epoch_start_time
