@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from loguru import logger
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 from src.id_mapper import IDMapper
 
@@ -214,7 +214,7 @@ def train(
             if verbose:
                 logger.info(f"Epoch {epoch + 1}, Validation Loss: {val_loss:.4f}")
 
-            scheduler.step(val_loss, epoch=epoch + 1)
+            scheduler.step(val_loss)
 
             if early_stopping:
                 if val_loss < best_val_loss * (1 - delta_perc):

@@ -1,24 +1,23 @@
 import json
 from collections import defaultdict
 from copy import deepcopy
-from typing import List
 
 import numpy as np
 import torch
 import torch.nn as nn
 from loguru import logger
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 from tqdm.auto import tqdm
 
 
-class SkipGramDataset(Dataset):
+class SkipGramDataset(IterableDataset):
     """
     This class represents a dataset for training a SkipGram model.
     """
 
     def __init__(
         self,
-        sequences: List[int],
+        sequences_fp: str,
         interacted=defaultdict(set),
         item_freq=defaultdict(int),
         window_size=2,
@@ -27,7 +26,7 @@ class SkipGramDataset(Dataset):
     ):
         """
         Args:
-            sequences (list of list of int): The sequences of item indices.
+            sequences_fp (str): File path to the sequences of item indices in jsonl format.
             interacted_dict (defaultdict(set)): A dictionary that keeps track of the other items that shared the same basket with the target item. Those items are ignored when negative sampling.
             item_freq (defaultdict(int)): A dictionary that keeps track the item frequency. It's used to
             window_size (int): The context window size.
@@ -35,7 +34,8 @@ class SkipGramDataset(Dataset):
 
         The reason that interacted_dict and item_freq can be passed into the initialization is that at val dataset creation we want to do negative sampling based on the data from the train set as well.
         """
-        self.sequences = sequences
+        assert sequences_fp.endswith(".jsonl")
+        self.sequences_fp = sequences_fp
         self.window_size = window_size
         self.negative_samples = negative_samples
 
@@ -47,42 +47,45 @@ class SkipGramDataset(Dataset):
             self.id_to_idx = id_to_idx
             self.idx_to_id = {v: k for k, v in id_to_idx.items()}
 
-        # Next two lines are used to map the index of __getitem__ to the sequence
-        self.idx_to_seq = []
-        self.idx_to_seq_idx = []
-
         self.interacted = deepcopy(interacted)
         self.item_freq = deepcopy(item_freq)
+        self.num_targets = 0  # Counter for number of items in all sequences
 
         # Keep tracked of which item-pair co-occur in one basket
         # When doing negative sampling we do not consider the other items that the target item has shared basket
         logger.info("Processing sequences to build interaction data...")
-        for seq_idx, seq in tqdm(
-            enumerate(sequences),
-            desc="Building interactions",
-            total=len(sequences),
-            leave=True,
-        ):
-            # Add the sequence to the index to sequence mapping
-            self.idx_to_seq.extend([seq_idx] * len(seq))
-            self.idx_to_seq_idx.extend(np.arange(len(seq)))
+        with open(self.sequences_fp, "r") as f:
+            seq_idx = 0
+            # Wrap the file with tqdm to show progress
+            for line in tqdm(f, desc="Building interactions"):
+                # Parse each line into a Python object
+                seq = json.loads(line)
 
-            for item in seq:
-                idx = self.id_to_idx.get(item)
-                if idx is None:
-                    idx = len(self.id_to_idx)
-                    self.id_to_idx[item] = idx
-                    self.idx_to_id[idx] = item
+                for item in seq:
+                    idx = self.id_to_idx.get(item)
+                    if idx is None:
+                        idx = len(self.id_to_idx)
+                        self.id_to_idx[item] = idx
+                        self.idx_to_id[idx] = item
+                    self.num_targets += 1
 
-            seq_idx_set = set([self.id_to_idx[id_] for id_ in seq])
-            for idx in seq_idx_set:
-                # An item can be considered that it has interacted with itself
-                # This helps with negative sampling later
-                self.interacted[idx].update(seq_idx_set)
-                self.item_freq[idx] += 1
+                seq_idx_set = set([self.id_to_idx[id_] for id_ in seq])
+                for idx in seq_idx_set:
+                    # An item can be considered that it has interacted with itself
+                    # This helps with negative sampling later
+                    self.interacted[idx].update(seq_idx_set)
+                    self.item_freq[idx] += 1
+
+                seq_idx += 1
 
         # Total number of unique items
-        self.vocab_size = len(self.item_freq)
+        if id_to_idx is None:
+            self.vocab_size = len(self.item_freq)
+        else:
+            # Need to check this because sometimes the id_to_idx can have more items than the item_freq
+            # For example quen previously we filter out sequence length = 1 so there might be some items
+            # are excluded
+            self.vocab_size = len(id_to_idx)
 
         # Create a list of items and corresponding probabilities for sampling
         items, frequencies = zip(*self.item_freq.items())
@@ -96,17 +99,18 @@ class SkipGramDataset(Dataset):
         self.sampling_probs = self.item_freq_array**0.75
         self.sampling_probs /= self.sampling_probs.sum()
 
-    def __len__(self):
-        # Get index based on the item in the sequence instead of the sequence
-        # This is to make tensors in one batch having the same shape
-        # and to make batch_size works with Dataloader wrapper
-        return len(self.idx_to_seq)
+    def __iter__(self):
+        with open(self.sequences_fp, "r") as f:
+            for line in f:
+                seq = json.loads(line)
+                for i in range(len(seq)):
+                    yield self.__get_item(seq, i)
 
-    def __getitem__(self, idx):
-        sequence_idx = self.idx_to_seq[idx]
-        sequence = self.sequences[sequence_idx]
+    def __len__(self):
+        return self.num_targets
+
+    def __get_item(self, sequence, i):
         sequence = [self.id_to_idx[item] for item in sequence]
-        i = self.idx_to_seq_idx[idx]
         target_item = sequence[i]
 
         positive_pairs = []
