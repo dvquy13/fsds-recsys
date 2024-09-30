@@ -1,4 +1,5 @@
 import os
+import time
 
 import lightning as L
 import pandas as pd
@@ -36,7 +37,14 @@ class LitSkipGram(L.LightningModule):
         loss_fn = nn.BCELoss()
         loss = loss_fn(predictions, labels)
 
-        self.log("train_loss", loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log(
+            "train_loss",
+            loss,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -49,7 +57,9 @@ class LitSkipGram(L.LightningModule):
         loss_fn = nn.BCELoss()
         loss = loss_fn(predictions, labels)
 
-        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log(
+            "val_loss", loss, on_epoch=True, prog_bar=True, logger=True, sync_dist=True
+        )
         return loss
 
     def configure_optimizers(self):
@@ -74,7 +84,7 @@ class LitSkipGram(L.LightningModule):
         sch = self.lr_schedulers()
 
         if sch is not None:
-            self.log("learning_rate", sch.get_last_lr()[0])
+            self.log("learning_rate", sch.get_last_lr()[0], sync_dist=True)
 
     def on_fit_end(self):
         self._log_classification_metrics(self.trainer.val_dataloaders)
@@ -134,3 +144,12 @@ class LitSkipGram(L.LightningModule):
         labels = torch.tensor(eval_classification_df[target_col].values)
         roc_auc = BinaryAUROC()(predictions, labels)
         self.logger.experiment.add_scalar("val_roc_auc", roc_auc, self.current_epoch)
+
+    def on_train_start(self):
+        self.train_start_time = time.time()
+
+    def on_train_end(self):
+        total_train_time = time.time() - self.train_start_time
+        self.logger.experiment.add_scalar(
+            "training/total_time_seconds", total_train_time, 0
+        )
