@@ -1,5 +1,4 @@
 import os
-import time
 
 import lightning as L
 import pandas as pd
@@ -144,12 +143,3 @@ class LitSkipGram(L.LightningModule):
         labels = torch.tensor(eval_classification_df[target_col].values)
         roc_auc = BinaryAUROC()(predictions, labels)
         self.logger.experiment.add_scalar("val_roc_auc", roc_auc, self.current_epoch)
-
-    def on_train_start(self):
-        self.train_start_time = time.time()
-
-    def on_train_end(self):
-        total_train_time = time.time() - self.train_start_time
-        self.logger.experiment.add_scalar(
-            "training/total_time_seconds", total_train_time, 0
-        )
