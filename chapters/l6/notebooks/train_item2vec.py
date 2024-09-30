@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 import lightning as L
 import mlflow
@@ -25,7 +26,7 @@ class Args(BaseModel):
     testing: bool = False
     log_to_mlflow: bool = False
     experiment_name: str = "FSDS RecSys - L6 - Scale training"
-    run_name: str = "006-lightning-ddp-save-checkpoint"
+    run_name: str = "006-lightning-ddp-multi-gpu"
     notebook_persist_dp: str = None
     random_seed: int = 41
 
@@ -33,7 +34,7 @@ class Args(BaseModel):
     top_k: int = 10
 
     max_epochs: int = 1000
-    batch_size: int = 128
+    batch_size: int = 1028
 
     num_negative_samples: int = 2
     window_size: int = 1
@@ -105,6 +106,14 @@ def prepare_dataloaders(args, idm, sequences_fp, val_sequences_fp):
 
 
 def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Train a SkipGram model with Lightning")
+    parser.add_argument("--accelerator", type=str, default="gpu", help="Accelerator type: cpu, gpu, etc.")
+    parser.add_argument("--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use")
+
+    args_cli = parser.parse_args()
+
+    # Initialize model arguments
     args = Args().init()
 
     # Load ID Mapper
@@ -149,8 +158,8 @@ def main():
         default_root_dir=log_dir,
         max_epochs=args.max_epochs,
         callbacks=[early_stopping, checkpoint_callback],
-        accelerator="cpu",
-        devices=4,
+        accelerator=args_cli.accelerator,
+        devices=args_cli.devices,
         strategy="ddp",
     )
     trainer.fit(
