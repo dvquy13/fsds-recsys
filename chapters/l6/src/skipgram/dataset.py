@@ -108,8 +108,9 @@ class SkipGramDataset(IterableDataset):
                 for i in range(len(seq)):
                     yield self._get_item(seq, i)
 
-    def __len__(self):
-        return self.num_targets
+    # Comment out because PyTorch Lightning complains that this might not work correctly
+    # def __len__(self):
+    #     return self.num_targets
 
     def _get_item(self, sequence, i):
         sequence = [self.id_to_idx[item] for item in sequence]

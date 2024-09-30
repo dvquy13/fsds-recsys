@@ -24,6 +24,8 @@ pytest = "^8.3.3"
 onnx = "^1.16.2"
 dill = "^0.3.8"
 faiss-cpu = "^1.8.0.post1"
+lightning = "^2.4.0"
+tensorboard = "^2.18.0"
 
 
 [tool.poetry.group.dev.dependencies]
