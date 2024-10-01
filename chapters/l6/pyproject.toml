@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "reco-algo"
+name = "fsds-recsys-scalable-training"
 version = "0.1.0"
 description = ""
-authors = ["Quy Dinh <quy.dinh3195@gmail.com>"]
+authors = ["Quy Dinh <quydv@fullstackdatascience.com>"]
 readme = "README.md"
 package-mode = false
 
