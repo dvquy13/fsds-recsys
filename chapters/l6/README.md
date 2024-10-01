@@ -1,10 +1,21 @@
 # Scalable training
 
-## Test PyTorch DDP
+# How to start
+
+## Prerequisite
+- Poetry 1.8.3
+- Miniconda or alternatives that can create new Python environment with a specified Python version
+
+## Set up
+- Create a new Python 3.11.9 environment: `conda create --prefix .venv python=3.11.9`
+- Make sure Poetry use the new Python 3.11.9 environment: `poetry env use .venv/bin/python`
+- Install Python dependencies with Poetry: `poetry install`
+
+## Test PyTorch DDP on Mock data
 ```shell
-# Test PyTorch Lightning
-poetry run torchrun --nproc_per_node=2 --nnodes=1 --master_addr="localhost" --master_port=12345 src/test_distributed.py --epochs 500 --device cpu
 # Test pure PyTorch DDP
+poetry run torchrun --nproc_per_node=2 --nnodes=1 --master_addr="localhost" --master_port=12345 src/test_distributed.py --epochs 500 --device cpu
+# Test PyTorch Lightning
 poetry run python src/test_lightning.py --accelerator cpu --devices 2
 ```
 
@@ -47,7 +58,7 @@ poetry install
 
 ```shell
 cd notebooks
-poetry run python train_item2vec.py
+poetry run python train_item2vec.py --accelerator cpu --devices 1
 ```
 
 Open a new shell:

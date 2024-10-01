@@ -3,7 +3,7 @@ from typing import Any, Dict
 import torch
 import torch.nn as nn
 
-from src.skipgram.dataset import SkipGramDataset, SkipGramDistributedDataset
+from src.skipgram.dataset import SkipGramDataset
 
 
 class SkipGram(nn.Module):
@@ -57,4 +57,4 @@ class SkipGram(nn.Module):
         """
         Returns the expected dataset type for training this model.
         """
-        return [SkipGramDataset, SkipGramDistributedDataset]
+        return [SkipGramDataset]

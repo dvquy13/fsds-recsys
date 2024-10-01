@@ -4,10 +4,10 @@ from copy import deepcopy
 
 import numpy as np
 import torch
-import torch.distributed as dist
 import torch.nn as nn
 from loguru import logger
-from torch.utils.data import IterableDataset
+from torch.distributed import get_rank, get_world_size
+from torch.utils.data import IterableDataset, get_worker_info
 from tqdm.auto import tqdm
 
 
@@ -80,6 +80,8 @@ class SkipGramDataset(IterableDataset):
 
                 seq_idx += 1
 
+        self.num_sequences = seq_idx + 1
+
         # Total number of unique items
         if id_to_idx is None:
             self.vocab_size = len(self.item_freq)
@@ -101,16 +103,35 @@ class SkipGramDataset(IterableDataset):
         self.sampling_probs = self.item_freq_array**0.75
         self.sampling_probs /= self.sampling_probs.sum()
 
+    def get_process_info(self):
+        """
+        Get information about which process is processing the data so that we can correctly split up the data based on iteration
+        """
+        worker_info = get_worker_info()
+        num_workers = worker_info.num_workers if worker_info is not None else 1
+        worker_id = worker_info.id if worker_info is not None else 0
+
+        world_size = get_world_size()
+        process_rank = get_rank()
+
+        num_replicas = num_workers * world_size
+        rank = process_rank * num_workers + worker_id
+
+        return num_replicas, rank
+
     def __iter__(self):
+        num_replicas, rank = self.get_process_info()
         with open(self.sequences_fp, "r") as f:
+            idx = 0
             for line in f:
                 seq = json.loads(line)
                 for i in range(len(seq)):
-                    yield self._get_item(seq, i)
+                    if idx % num_replicas != rank:
+                        idx += 1
+                        continue
 
-    # Comment out because PyTorch Lightning complains that this might not work correctly
-    # def __len__(self):
-    #     return self.num_targets
+                    yield self._get_item(seq, i)
+                    idx += 1
 
     def _get_item(self, sequence, i):
         sequence = [self.id_to_idx[item] for item in sequence]
@@ -202,40 +223,3 @@ class SkipGramDataset(IterableDataset):
 
         loss = loss_fn(predictions, labels)
         return loss
-
-
-class SkipGramDistributedDataset(SkipGramDataset):
-    def __init__(
-        self,
-        sequences_fp: str,
-        interacted=defaultdict(set),
-        item_freq=defaultdict(int),
-        window_size=2,
-        negative_samples=5,
-        id_to_idx=None,
-    ):
-        super().__init__(
-            sequences_fp,
-            interacted=interacted,
-            item_freq=item_freq,
-            window_size=window_size,
-            negative_samples=negative_samples,
-            id_to_idx=id_to_idx,
-        )
-        self.rank = dist.get_rank()
-        self.world_size = dist.get_world_size()
-        logger.info(f"{self.rank=}")
-        logger.info(f"{self.world_size=}")
-
-    def __iter__(self):
-        i = 0
-        with open(self.sequences_fp, "r") as f:
-            for line in f:
-                if self.rank == (i % self.world_size):
-                    seq = json.loads(line)
-                    for i in range(len(seq)):
-                        yield self._get_item(seq, i)
-                i += 1
-
-    def __len__(self):
-        return self.num_targets // self.world_size

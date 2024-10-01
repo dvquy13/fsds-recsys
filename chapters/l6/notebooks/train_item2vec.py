@@ -1,10 +1,8 @@
+import argparse
 import os
 import sys
-import argparse
 
 import lightning as L
-import mlflow
-import torch
 from dotenv import load_dotenv
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -24,9 +22,8 @@ from src.skipgram.trainer import LitSkipGram
 
 class Args(BaseModel):
     testing: bool = False
-    log_to_mlflow: bool = False
     experiment_name: str = "FSDS RecSys - L6 - Scale training"
-    run_name: str = "006-lightning-ddp-multi-gpu"
+    run_name: str = "008-distributed-data-iterable-dataset-4-cpu"
     notebook_persist_dp: str = None
     random_seed: int = 41
 
@@ -34,7 +31,7 @@ class Args(BaseModel):
     top_k: int = 10
 
     max_epochs: int = 1000
-    batch_size: int = 1028
+    batch_size: int = 128
 
     num_negative_samples: int = 2
     window_size: int = 1
@@ -47,19 +44,6 @@ class Args(BaseModel):
     def init(self):
         self.notebook_persist_dp = os.path.abspath(f"data/{self.run_name}")
         os.makedirs(self.notebook_persist_dp, exist_ok=True)
-
-        if not os.environ.get("MLFLOW_TRACKING_URI"):
-            logger.warning(
-                f"Environment variable MLFLOW_TRACKING_URI is not set. Setting self.log_to_mlflow to false."
-            )
-            self.log_to_mlflow = False
-
-        if self.log_to_mlflow:
-            logger.info(
-                f"Setting up MLflow experiment {self.experiment_name} - run {self.run_name}..."
-            )
-            mlflow.set_experiment(self.experiment_name)
-            mlflow.start_run(run_name=self.run_name)
 
         return self
 
@@ -91,12 +75,15 @@ def prepare_dataloaders(args, idm, sequences_fp, val_sequences_fp):
         shuffle=False,
         drop_last=True,
         collate_fn=dataset.collate_fn,
+        # Avoid setting num_workers > 0 when working with DDP since it's a bit tricker to pass the torch.distrbuted's rank and world_size
+        # num_workers=2,
+        # persistent_workers=True,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        drop_last=True,
+        drop_last=False,  # Do not set to True since it can result in "Early stopping conditioned on metric `val_loss` which is not available" when batch_size > val dataset
         collate_fn=val_dataset.collate_fn,
     )
 
@@ -107,9 +94,18 @@ def prepare_dataloaders(args, idm, sequences_fp, val_sequences_fp):
 
 def main():
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Train a SkipGram model with Lightning")
-    parser.add_argument("--accelerator", type=str, default="gpu", help="Accelerator type: cpu, gpu, etc.")
-    parser.add_argument("--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use")
+    parser = argparse.ArgumentParser(
+        description="Train a SkipGram model with Lightning"
+    )
+    parser.add_argument(
+        "--accelerator",
+        type=str,
+        default="gpu",
+        help="Accelerator type: cpu, gpu, etc.",
+    )
+    parser.add_argument(
+        "--devices", type=int, default=1, help="Number of devices (GPUs/CPUs) to use"
+    )
 
     args_cli = parser.parse_args()
 
