@@ -40,7 +40,9 @@ gh auth login
 
 ```shell
 mkdir workstation
+cd workstation
 gh repo clone dvquy13/fsds-recsys
+cd fsds-recsys
 ```
 
 -> Open workspace fsds-recsys with VSCode
@@ -64,7 +66,7 @@ poetry run python train_item2vec.py --accelerator cpu --devices 1
 Open a new shell:
 ```shell
 cd chapters/l6
-poetry run tensorboard --logdir notebooks/data/<run_name>/logs/run --port 6009
+poetry run tensorboard --logdir notebooks/data --port 6009
 ```
 
 -> Port forward to open the tensorboard on local
