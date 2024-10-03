@@ -1,6 +1,7 @@
 import os
 
 import lightning as L
+import mlflow
 import pandas as pd
 import torch
 from evidently.metric_preset import ClassificationPreset
@@ -72,7 +73,7 @@ class LitSkipGram(L.LightningModule):
         # Create the scheduler
         scheduler = {
             "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode="min", factor=0.3, patience=3
+                optimizer, mode="min", factor=0.3, patience=2
             ),
             "monitor": "val_loss",
         }
@@ -139,39 +140,42 @@ class LitSkipGram(L.LightningModule):
         os.makedirs(self.log_dir, exist_ok=True)
         classification_performance_report.save_html(evidently_report_fp)
 
-        # if log_to_mlflow:
-        #     mlflow.log_artifact(evidently_report_fp)
-        #     for metric_result in classification_performance_report.as_dict()["metrics"]:
-        #         metric = metric_result["metric"]
-        #         if metric == "ClassificationQualityMetric":
-        #             roc_auc = float(metric_result["result"]["current"]["roc_auc"])
-        #             mlflow.log_metric(f"val_roc_auc", roc_auc)
-        #             continue
-        #         if metric == "ClassificationPRTable":
-        #             columns = [
-        #                 "top_perc",
-        #                 "count",
-        #                 "prob",
-        #                 "tp",
-        #                 "fp",
-        #                 "precision",
-        #                 "recall",
-        #             ]
-        #             table = metric_result["result"]["current"][1]
-        #             table_df = pd.DataFrame(table, columns=columns)
-        #             for i, row in table_df.iterrows():
-        #                 prob = int(row["prob"] * 100)  # MLflow step only takes int
-        #                 precision = float(row["precision"])
-        #                 recall = float(row["recall"])
-        #                 mlflow.log_metric(
-        #                     f"val_precision_at_prob_as_threshold_step", precision, step=prob
-        #                 )
-        #                 mlflow.log_metric(
-        #                     f"val_recall_at_prob_as_threshold_step", recall, step=prob
-        #                 )
-        #             break
-
-        predictions = torch.tensor(eval_classification_df[prediction_col].values)
-        labels = torch.tensor(eval_classification_df[target_col].values)
-        roc_auc = BinaryAUROC()(predictions, labels)
-        self.logger.experiment.add_scalar("val_roc_auc", roc_auc, self.current_epoch)
+        if "mlflow" in str(self.logger.__class__).lower():
+            run_id = self.logger.run_id
+            mlf_client = self.logger.experiment
+            mlf_client.log_artifact(run_id, evidently_report_fp)
+            for metric_result in classification_performance_report.as_dict()["metrics"]:
+                metric = metric_result["metric"]
+                if metric == "ClassificationQualityMetric":
+                    roc_auc = float(metric_result["result"]["current"]["roc_auc"])
+                    mlf_client.log_metric(run_id, f"val_roc_auc", roc_auc)
+                    continue
+                if metric == "ClassificationPRTable":
+                    columns = [
+                        "top_perc",
+                        "count",
+                        "prob",
+                        "tp",
+                        "fp",
+                        "precision",
+                        "recall",
+                    ]
+                    table = metric_result["result"]["current"][1]
+                    table_df = pd.DataFrame(table, columns=columns)
+                    for i, row in table_df.iterrows():
+                        prob = int(row["prob"] * 100)  # MLflow step only takes int
+                        precision = float(row["precision"])
+                        recall = float(row["recall"])
+                        mlf_client.log_metric(
+                            run_id,
+                            f"val_precision_at_prob_as_threshold_step",
+                            precision,
+                            step=prob,
+                        )
+                        mlf_client.log_metric(
+                            run_id,
+                            f"val_recall_at_prob_as_threshold_step",
+                            recall,
+                            step=prob,
+                        )
+                    break

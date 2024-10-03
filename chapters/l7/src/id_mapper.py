@@ -56,3 +56,16 @@ class IDMapper:
             self.unknown_user_index = len(self.user_to_index)
             self.unknown_item_index = len(self.item_to_index)
         return self
+
+
+def map_indice(df, idm: IDMapper, user_col="user_id", item_col="parent_asin"):
+    return df.assign(
+        **{
+            "user_indice": lambda df: df[user_col].apply(
+                lambda user_id: idm.get_user_index(user_id)
+            ),
+            "item_indice": lambda df: df[item_col].apply(
+                lambda item_id: idm.get_item_index(item_id)
+            ),
+        }
+    )
