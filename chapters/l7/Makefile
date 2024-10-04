@@ -12,3 +12,6 @@ notebook-up:
 
 redis-up:
 	docker compose -f compose.yml up -d
+
+api-up:
+	poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
