@@ -5,7 +5,7 @@
 ## Prerequisite
 - Poetry 1.8.3
 - Miniconda or alternatives that can create new Python environment with a specified Python version
-- PostgreSQL (optionall for Feast setup in Lesson 2 and to install the poetry deps)
+- PostgreSQL (optionally for Feast setup in Lesson 2, this is required to install the psycopg2 Python library)
   - For Mac, run: `brew install postgresql`
 
 ## Set up
