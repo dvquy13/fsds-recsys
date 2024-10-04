@@ -1,0 +1,8 @@
+services:
+  redis:
+    image: redis:7.4
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data

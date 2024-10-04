@@ -24,3 +24,5 @@ notebooks/*
 mlruns/*
 
 **/*.ckpt
+
+redis_data/
