@@ -15,3 +15,7 @@ redis-up:
 
 api-up:
 	poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+model-server-up:
+	cd model_server
+	poetry run bentoml serve service:I2VService --reload
