@@ -1,17 +1,20 @@
 import json
+import os
 from typing import List, Optional
 
 import httpx
 import redis
 from fastapi import FastAPI, HTTPException, Query
+from load_examples import custom_openapi
 from loguru import logger
-
-from .load_examples import custom_openapi
 
 app = FastAPI()
 
-item2vec_url = "http://localhost:3000/predict"
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", "http://localhost:3000")
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+
+item2vec_url = f"{MODEL_SERVER_URL}/predict"
+redis_client = redis.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
 redis_output_i2i_key_prefix = "output:i2i:"
 redis_feature_recent_items_key_prefix = "feature:user:recent_items:"
 redis_output_popular_key = "output:popular"
